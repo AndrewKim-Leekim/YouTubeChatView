@@ -39,7 +39,7 @@ java \
   -jar target/yt-multichat-javafx-1.0.0.jar
 ```
 
-> `target/lib` 안에 아키텍처별(JavaFX `mac` 또는 `mac-aarch64`) 네이티브 라이브러리가 복사되므로, JAR과 `lib` 폴더를 함께 배포해야 합니다. JAR만 단독으로 실행하면 `Error: JavaFX runtime components are missing` 오류가 발생합니다.
+> `target/lib` 안에 아키텍처별(JavaFX `mac` 또는 `mac-aarch64`) 네이티브 라이브러리가 복사되므로, JAR과 `lib` 폴더를 함께 배포해야 합니다. `java -jar target/yt-multichat-javafx-1.0.0.jar`처럼 모듈 경로 없이 실행하면 `Error: JavaFX runtime components are missing` 오류가 발생하니 **꼭** 위 명령 또는 스크립트를 사용하세요.
 
 ### 2. jlink + jpackage 로 macOS 앱 번들 만들기
 `mvn clean package` 단계에서 `target/yt-multichat/`에 JavaFX 런타임 이미지가 자동으로 생성됩니다. (Apple Silicon은 `-Pmac-aarch64` 프로필을 추가하세요.)
@@ -49,7 +49,14 @@ java \
 target/yt-multichat/bin/yt-multichat
 ```
 
-`.app` 이미지가 필요하면 위 런타임을 `jpackage`에 넘깁니다.
+`.app` 이미지가 필요하면 위 런타임을 `jpackage`에 넘깁니다. 아래 스크립트는 아키텍처에 맞는 Maven 빌드(`mvn clean package`)를 먼저 실행한 뒤 `jpackage`를 호출합니다.
+```bash
+./scripts/build-app-image.sh            # Intel 맥용 .app
+./scripts/build-app-image.sh --arch arm # Apple Silicon 맥용 .app
+./scripts/build-app-image.sh --type dmg # DMG 생성 (서명/노터라이즈 전 단계)
+```
+
+직접 명령을 실행하고 싶다면 아래와 같이 `jpackage`를 호출할 수 있습니다.
 ```bash
 jpackage \
   --type app-image \
@@ -64,6 +71,24 @@ jpackage \
 3. 필요하다면 `--type dmg` 또는 `--type pkg` 옵션을 추가해 배포용 이미지를 만듭니다.
 
 Apple Silicon용 `.app`이 필요하면 `mvn -Pmac-aarch64 clean package`로 런타임을 만든 뒤 동일한 `jpackage` 명령을 실행하세요.
+
+### 3. Gatekeeper 우회 및 서명 안내
+서명이 없는 `.app`/`.dmg`를 배포하면 macOS Gatekeeper가 “확인되지 않은 개발자” 경고와 함께 앱 삭제를 요구할 수 있습니다. 목적에 따라 아래 절차 중 하나를 적용하세요.
+
+1. **내부 테스트/제한된 배포** – Finder에서 앱을 **우클릭 → Open**으로 실행하거나, 아래 명령으로 격리 속성을 제거합니다.
+   ```bash
+   xattr -d com.apple.quarantine /Applications/TubeMultiView.app
+   ```
+
+2. **외부 배포(권장)** – Apple Developer 계정으로 서명 및 Notarization을 진행해야 Gatekeeper 경고가 사라집니다.
+   ```bash
+   codesign --deep --force --options runtime \
+     --sign "Developer ID Application: Your Name (TEAMID)" \
+     TubeMultiView.app
+   xcrun notarytool submit TubeMultiView.dmg --apple-id <APPLE_ID> \
+     --team-id <TEAMID> --password <APP_SPECIFIC_PASSWORD> --wait
+   ```
+   Notarization이 완료된 이미지는 검역 속성이 붙지 않아 사용자 시스템에서 곧바로 실행됩니다.
 
 ## 종료 시 주의
 애플리케이션을 닫을 때는 창 메뉴의 **Quit**(⌘+Q) 또는 창 닫기 버튼을 사용해 정상 종료하세요. 백그라운드 업데이트 스케줄러가 함께 내려가며, Preferences에 저장된 API 키/영상 ID 정보는 유지됩니다.
