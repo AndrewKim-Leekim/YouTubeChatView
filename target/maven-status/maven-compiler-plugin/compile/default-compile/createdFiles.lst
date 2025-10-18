@@ -1,0 +1,16 @@
+app/SetupView.class
+app/CountPanel.class
+app/Ui.class
+app/YouTubeParsers$YtCfg.class
+app/YouTubeParsers.class
+app/SetupView$2.class
+app/MainBoardView.class
+app/AppSettings.class
+app/ViewerService$ChannelMeta.class
+app/Main.class
+app/ViewerService.class
+app/ConfirmDialogs.class
+app/SetupView$OnStart.class
+app/ChatPanel.class
+app/SetupView$1.class
+app/SetupView$BooleanSupplier.class
