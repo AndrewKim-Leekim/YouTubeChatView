@@ -22,39 +22,39 @@ mvn clean package
 mvn -Pmac-aarch64 clean package
 ```
 
-빌드가 끝나면 `target/yt-multichat-javafx-1.0.0.jar`와 `target/lib/`가 생성됩니다. 동일한 디렉터리에서 아래 명령으로 실행합니다.
+빌드가 끝나면 `target/yt-multichat-javafx-1.0.0.jar`와 `target/lib/`가 생성됩니다. JavaFX 모듈을 모듈 경로에 올리고 실행하세요.
 ```bash
-java -jar target/yt-multichat-javafx-1.0.0.jar
+java \
+  --module-path target/lib \
+  --add-modules javafx.controls,javafx.web \
+  -jar target/yt-multichat-javafx-1.0.0.jar
 ```
 
-> `target/lib` 안에 JavaFX 네이티브 라이브러리가 함께 복사되므로, JAR과 `lib` 폴더를 같은 위치에 둔 채 배포하세요.
+> `target/lib` 안에 아키텍처별(JavaFX `mac` 또는 `mac-aarch64`) 네이티브 라이브러리가 복사되므로, JAR과 `lib` 폴더를 함께 배포해야 합니다.
 
 ### 2. jlink + jpackage 로 macOS 앱 번들 만들기
-1. 런타임 이미지 생성
-   ```bash
-   # Intel Mac
-   mvn clean javafx:jlink
+`mvn clean package` 단계에서 `target/yt-multichat/`에 JavaFX 런타임 이미지가 자동으로 생성됩니다. (Apple Silicon은 `-Pmac-aarch64` 프로필을 추가하세요.)
 
-   # Apple Silicon
-   mvn -Pmac-aarch64 clean javafx:jlink
-   ```
-   실행 후 `target/image/`에 JavaFX 런타임이 만들어집니다.
+런타임 이미지는 즉시 실행할 수 있습니다.
+```bash
+target/yt-multichat/bin/yt-multichat
+```
 
-2. `.app` 이미지 생성
-   ```bash
-   jpackage \
-     --type app-image \
-     --name TubeMultiView \
-     --app-version 1.0.0 \
-     --input target \
-     --main-jar yt-multichat-javafx-1.0.0.jar \
-     --main-class app.Main \
-     --runtime-image target/image
-   ```
+`.app` 이미지가 필요하면 위 런타임을 `jpackage`에 넘깁니다.
+```bash
+jpackage \
+  --type app-image \
+  --name TubeMultiView \
+  --app-version 1.0.0 \
+  --input target \
+  --main-jar yt-multichat-javafx-1.0.0.jar \
+  --main-class app.Main \
+  --runtime-image target/yt-multichat
+```
 
 3. 필요하다면 `--type dmg` 또는 `--type pkg` 옵션을 추가해 배포용 이미지를 만듭니다.
 
-Apple Silicon용 `.app`이 필요하면 `mvn -Pmac-aarch64 clean javafx:jlink`로 런타임을 만든 뒤 동일한 `jpackage` 명령을 실행하세요.
+Apple Silicon용 `.app`이 필요하면 `mvn -Pmac-aarch64 clean package`로 런타임을 만든 뒤 동일한 `jpackage` 명령을 실행하세요.
 
 ## 종료 시 주의
 애플리케이션을 닫을 때는 창 메뉴의 **Quit**(⌘+Q) 또는 창 닫기 버튼을 사용해 정상 종료하세요. 백그라운드 업데이트 스케줄러가 함께 내려가며, Preferences에 저장된 API 키/영상 ID 정보는 유지됩니다.

@@ -101,8 +101,19 @@
                 <version>0.0.8</version>
                 <configuration>
                     <mainClass>${main.class}</mainClass>
-                    <stripNativeCommands>true</stripNativeCommands>
+                    <launcher>yt-multichat</launcher>
+                    <jlinkImageName>yt-multichat</jlinkImageName>
+                    <jlinkZipName>yt-multichat</jlinkZipName>
                 </configuration>
+                <executions>
+                    <execution>
+                        <id>create-runtime-image</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>jlink</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>
