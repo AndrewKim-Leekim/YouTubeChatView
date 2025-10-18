@@ -51,9 +51,11 @@ target/yt-multichat/bin/yt-multichat
 
 `.app` 이미지가 필요하면 위 런타임을 `jpackage`에 넘깁니다. 아래 스크립트는 아키텍처에 맞는 Maven 빌드(`mvn clean package`)를 먼저 실행한 뒤 `jpackage`를 호출합니다.
 ```bash
-./scripts/build-app-image.sh            # Intel 맥용 .app
-./scripts/build-app-image.sh --arch arm # Apple Silicon 맥용 .app
-./scripts/build-app-image.sh --type dmg # DMG 생성 (서명/노터라이즈 전 단계)
+./scripts/build-app-image.sh                         # Intel 맥용 .app
+./scripts/build-app-image.sh --arch arm              # Apple Silicon 맥용 .app
+./scripts/build-app-image.sh --type dmg              # DMG 생성 (서명/노터라이즈 전 단계)
+./scripts/build-app-image.sh --identity "Developer ID Application: Your Name (TEAMID)"
+                                                     # jpackage 단계에서 서명까지 진행
 ```
 
 직접 명령을 실행하고 싶다면 아래와 같이 `jpackage`를 호출할 수 있습니다.
@@ -79,6 +81,9 @@ Apple Silicon용 `.app`이 필요하면 `mvn -Pmac-aarch64 clean package`로 런
    ```bash
    xattr -d com.apple.quarantine /Applications/TubeMultiView.app
    ```
+   DMG를 복사하거나 압축을 해제하는 과정에서 `com.apple.quarantine` 속성이 붙으면 macOS가 “손상되었기 때문에 열 수 없습니다”라는
+   경고를 띄울 수 있습니다. `xattr -p com.apple.quarantine <파일>`로 속성을 확인하고, 위 명령 또는 `xattr -dr`을 이용해 앱 번들 전체에서
+   제거하면 정상 실행됩니다.
 
 2. **외부 배포(권장)** – Apple Developer 계정으로 서명 및 Notarization을 진행해야 Gatekeeper 경고가 사라집니다.
    ```bash
@@ -88,7 +93,17 @@ Apple Silicon용 `.app`이 필요하면 `mvn -Pmac-aarch64 clean package`로 런
    xcrun notarytool submit TubeMultiView.dmg --apple-id <APPLE_ID> \
      --team-id <TEAMID> --password <APP_SPECIFIC_PASSWORD> --wait
    ```
-   Notarization이 완료된 이미지는 검역 속성이 붙지 않아 사용자 시스템에서 곧바로 실행됩니다.
+   Notarization이 완료된 이미지는 검역 속성이 붙지 않아 사용자 시스템에서 곧바로 실행됩니다. 서명된 빌드를 즉시 만들고 싶다면
+   `scripts/build-app-image.sh --identity "Developer ID Application: …"` 형태로 실행해 jpackage 단계에서 바로 서명할 수 있습니다. `spctl --assess -vv TubeMultiView.app`
+   명령으로 Gatekeeper가 인식하는 서명 상태를 확인하고, `xattr -d com.apple.quarantine TubeMultiView.dmg`로 DMG 파일의 격리 속성도
+   제거한 뒤 배포하세요.
+
+3. **서명 없이 계속 테스트해야 한다면** – 일시적으로 Gatekeeper 차단을 해제할 수 있습니다.
+   ```bash
+   sudo spctl --master-disable
+   ```
+   시스템 환경설정 → 보안 및 개인정보 보호에서 “모든 곳에서 다운로드한 앱 허용”을 켰다가, 테스트가 끝나면 반드시 원래 상태로 되돌리는
+   것을 권장합니다.
 
 ## 종료 시 주의
 애플리케이션을 닫을 때는 창 메뉴의 **Quit**(⌘+Q) 또는 창 닫기 버튼을 사용해 정상 종료하세요. 백그라운드 업데이트 스케줄러가 함께 내려가며, Preferences에 저장된 API 키/영상 ID 정보는 유지됩니다.

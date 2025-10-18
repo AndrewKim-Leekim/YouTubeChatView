@@ -3,13 +3,16 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/build-app-image.sh [--arch intel|arm] [--type app|dmg]
+Usage: scripts/build-app-image.sh [--arch intel|arm] [--type app|dmg] [--identity NAME]
 
 Options:
-  --arch   Target macOS architecture. "intel" uses the default JavaFX (classifier mac),
-           "arm" enables the mac-aarch64 Maven profile. Default: intel.
-  --type   Packaging type to hand off to jpackage. "app" produces an .app bundle,
-           "dmg" produces a mountable disk image. Default: app.
+  --arch      Target macOS architecture. "intel" uses the default JavaFX (classifier mac),
+              "arm" enables the mac-aarch64 Maven profile. Default: intel.
+  --type      Packaging type to hand off to jpackage. "app" produces an .app bundle,
+              "dmg" produces a mountable disk image. Default: app.
+  --identity  macOS signing identity (e.g. "Developer ID Application: …"). When provided,
+              the script passes --mac-sign and --mac-signing-key-user-name to jpackage so the
+              resulting bundle is pre-signed. If omitted, the bundle remains unsigned.
 
 The script expects JDK 17+ with the `jpackage` tool available.
 USAGE
@@ -17,6 +20,7 @@ USAGE
 
 ARCH="intel"
 PACKAGE_TYPE="app"
+MAC_SIGN_IDENTITY=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -26,6 +30,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --type)
       PACKAGE_TYPE="$2"
+      shift 2
+      ;;
+    --identity)
+      MAC_SIGN_IDENTITY="$2"
       shift 2
       ;;
     -h|--help)
@@ -88,6 +96,13 @@ JPACKAGE_ARGS=(
   "--runtime-image" "$TARGET_DIR/$RUNTIME_IMAGE_NAME"
   "--dest" "$APP_IMAGE_DEST"
 )
+
+if [[ -n "$MAC_SIGN_IDENTITY" ]]; then
+  JPACKAGE_ARGS+=(
+    "--mac-sign"
+    "--mac-signing-key-user-name" "$MAC_SIGN_IDENTITY"
+  )
+fi
 
 if [[ "$JPACKAGE_TYPE" == "dmg" ]]; then
   # Keep the .app alongside the DMG for manual signing or testing.
