@@ -175,8 +175,6 @@
                                         <argument>${main.class}</argument>
                                         <argument>--runtime-image</argument>
                                         <argument>${project.build.directory}/yt-multichat</argument>
-                                        <argument>--class-path</argument>
-                                        <argument>lib/*</argument>
                                         <argument>--icon</argument>
                                         <argument>${app.icon}</argument>
                                         <argument>--mac-package-identifier</argument>
