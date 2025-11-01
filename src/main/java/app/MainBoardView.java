@@ -15,9 +15,9 @@ public final class MainBoardView {
         ChatPanel mid  = new ChatPanel(service.channel2NameProperty(), service.channel2LogoUrlProperty(), v2);
 
         CountPanel c1 = new CountPanel(service.channel1NameProperty(), service.channel1LogoUrlProperty(),
-                service.video1TitleProperty(), service.count1Property());
+                service.video1TitleProperty(), service.count1Property(), service.subs1Property());
         CountPanel c2 = new CountPanel(service.channel2NameProperty(), service.channel2LogoUrlProperty(),
-                service.video2TitleProperty(), service.count2Property());
+                service.video2TitleProperty(), service.count2Property(), service.subs2Property());
 
         VBox rightCol = new VBox(gap, c1.getRoot(), c2.getRoot());
         rightCol.setFillWidth(true);

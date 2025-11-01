@@ -24,6 +24,7 @@ public final class ViewerService {
             "Accept-Language", "ko-KR,ko;q=0.9,en-US;q=0.6,en;q=0.5",
             "Cookie", "CONSENT=YES+cb.20210328-17-p0.en+F+678"
     );
+    private static final String INNERTUBE_API_KEY = "AIzaSyAO_FJ2SlqU1d76aAPkbD-fD-6I2yiqZ7Q";
 
     private final HttpClient http = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
@@ -37,16 +38,26 @@ public final class ViewerService {
     private String v1 = "";
     private String v2 = "";
 
-    private final SimpleStringProperty count1 = new SimpleStringProperty("시청: —명");
-    private final SimpleStringProperty count2 = new SimpleStringProperty("시청: —명");
-    private final SimpleStringProperty subs1  = new SimpleStringProperty("구독자: —");
-    private final SimpleStringProperty subs2  = new SimpleStringProperty("구독자: —");
+    private final SimpleStringProperty count1 = new SimpleStringProperty("—");
+    private final SimpleStringProperty count2 = new SimpleStringProperty("—");
+    private final SimpleStringProperty subs1  = new SimpleStringProperty("—");
+    private final SimpleStringProperty subs2  = new SimpleStringProperty("—");
     private final SimpleStringProperty ch1Name = new SimpleStringProperty("");
     private final SimpleStringProperty ch2Name = new SimpleStringProperty("");
     private final SimpleStringProperty ch1Logo = new SimpleStringProperty("");
     private final SimpleStringProperty ch2Logo = new SimpleStringProperty("");
     private final SimpleStringProperty v1Title = new SimpleStringProperty(" ");
     private final SimpleStringProperty v2Title = new SimpleStringProperty(" ");
+
+    private void updateSubscriberDisplay(SimpleStringProperty subsOut, String txt) {
+        if (txt == null || txt.isBlank()) return;
+        Platform.runLater(() -> {
+            String current = subsOut.get();
+            if ("비공개".equals(current)) return;
+            if ("비공개".equals(txt) && current != null && !current.isBlank() && !"—".equals(current)) return;
+            subsOut.set(txt);
+        });
+    }
 
     public void start(String apiKey, String v1, String v2) {
         this.apiKey = apiKey == null ? "" : apiKey.trim();
@@ -70,12 +81,13 @@ public final class ViewerService {
     private void refreshOne(String videoId, SimpleStringProperty out) {
         fetchConcurrentViewersAPI(videoId)
                 .thenCompose(opt -> opt.isPresent() ? CompletableFuture.completedFuture(opt)
-                        : scrapeWatchPageWatchersJSON(videoId))
+                        : fetchConcurrentViewersInnertube(videoId)
+                                .thenCompose(opt2 -> opt2.isPresent()
+                                        ? CompletableFuture.completedFuture(opt2)
+                                        : scrapeWatchPageWatchersJSON(videoId)))
                 .exceptionally(ex -> { System.err.println("[viewers] "+ex); return Optional.empty(); })
-                .thenAccept(opt -> Platform.runLater(() -> {
-                    String value = opt.map(nf::format).orElse("—");
-                    out.set("시청: " + value + "명");
-                }));
+                .thenAccept(opt -> Platform.runLater(() ->
+                        out.set(opt.map(nf::format).orElse("—"))));
     }
 
     // ===== Viewers =====
@@ -99,12 +111,12 @@ public final class ViewerService {
         return httpGET(u, true).thenApply(html -> {
             Map<String,Object> dict = YouTubeParsers.extractJSONDict(html, "ytInitialPlayerResponse");
             if (dict != null) {
-                Integer n = YouTubeParsers.findWatchingNowCount(dict);
+                Integer n = YouTubeParsers.findWatchingNowCount(dict, videoId);
                 if (n != null) return Optional.of(n.longValue());
             }
             dict = YouTubeParsers.extractJSONDict(html, "ytInitialData");
             if (dict != null) {
-                Integer n = YouTubeParsers.findWatchingNowCount(dict);
+                Integer n = YouTubeParsers.findWatchingNowCount(dict, videoId);
                 if (n != null) return Optional.of(n.longValue());
             }
             return Optional.empty();
@@ -131,6 +143,10 @@ public final class ViewerService {
                         String vTitle = snip.path("title").asText(" ");
                         Platform.runLater(() -> { chNameOut.set(chTitle); vTitleOut.set(vTitle); });
 
+                        fetchSubscribersFromWatchPage(videoId)
+                                .exceptionally(ex -> null)
+                                .thenAccept(txt -> updateSubscriberDisplay(subsOut, txt));
+
                         String c1 = "https://www.googleapis.com/youtube/v3/channels?part=snippet&id="+url(chId)+"&key="+url(apiKey);
                         httpGET(c1).thenAccept(cBody -> {
                             try {
@@ -147,21 +163,18 @@ public final class ViewerService {
                             try {
                                 JsonNode stats = om.readTree(sBody).path("items").path(0).path("statistics");
                                 if (stats.path("hiddenSubscriberCount").asBoolean(false)) {
-                                    Platform.runLater(() -> subsOut.set("구독자: 비공개"));
+                                    Platform.runLater(() -> subsOut.set("비공개"));
                                 } else {
                                     String sc = stats.path("subscriberCount").asText("");
                                     if (!sc.isEmpty()) {
                                         String pretty = nf.format(Long.parseLong(sc));
-                                        Platform.runLater(() -> subsOut.set("구독자: "+pretty+"명"));
+                                        Platform.runLater(() -> subsOut.set(pretty));
                                         return;
                                     }
-                                    fetchSubscribersViaInnertube(chId).thenAccept(txt -> {
-                                        if (txt != null) Platform.runLater(() -> subsOut.set(txt));
-                                        else scrapeSubscribersFromChannelURLs("https://www.youtube.com/channel/"+chId, chId)
-                                                .thenAccept(txt2 -> { if (txt2 != null) Platform.runLater(() -> subsOut.set(txt2)); });
-                                    });
+                                    chainSubscriberLookups(chId, "https://www.youtube.com/channel/"+chId, subsOut);
                                 }
                             } catch (Exception ignore) {}
+                            chainSubscriberLookups(chId, "https://www.youtube.com/channel/"+chId, subsOut);
                         });
                         return;
                     }
@@ -187,13 +200,48 @@ public final class ViewerService {
             }
         });
         fetchVideoOEmbed(videoId).thenAccept(t -> Platform.runLater(() -> vTitleOut.set(t == null ? " " : t)));
-        fetchAuthorURLFromVideo(videoId).thenCompose(chURL -> resolveChannelId(chURL).thenCompose(uc -> {
-            if (uc != null) return fetchSubscribersViaInnertube(uc)
-                    .thenApply(txt -> txt != null ? txt : null)
-                    .thenCompose(txt -> txt != null ? CompletableFuture.completedFuture(txt)
-                            : scrapeSubscribersFromChannelURLs(chURL == null ? "" : chURL, uc));
-            return scrapeSubscribersFromChannelURLs(chURL == null ? "" : chURL, null);
-        })).thenAccept(txt -> { if (txt != null) Platform.runLater(() -> subsOut.set(txt)); });
+        fetchSubscribersFromWatchPage(videoId)
+                .exceptionally(ex -> null)
+                .thenAccept(txt -> updateSubscriberDisplay(subsOut, txt));
+        fetchAuthorURLFromVideo(videoId).thenCompose(chURL -> resolveChannelId(chURL)
+                .thenApply(uc -> new ChannelRef(chURL, uc)))
+                .thenAccept(ref -> chainSubscriberLookups(ref.channelId, ref.channelUrl, subsOut));
+    }
+
+    private void chainSubscriberLookups(String channelId, String channelUrl,
+                                        SimpleStringProperty subsOut) {
+        String baseUrl = channelUrl == null ? "" : channelUrl;
+        CompletableFuture<String> next;
+        if (channelId != null && !channelId.isEmpty()) {
+            next = fetchSubscribersViaInnertube(channelId)
+                    .thenCompose(txt -> txt != null
+                            ? CompletableFuture.completedFuture(txt)
+                            : scrapeSubscribersFromChannelURLs(baseUrl.isEmpty()
+                            ? "https://www.youtube.com/channel/" + channelId
+                            : baseUrl, channelId));
+        } else {
+            next = scrapeSubscribersFromChannelURLs(baseUrl, null);
+        }
+        next = next.exceptionally(ex -> null);
+        next.thenAccept(txt -> updateSubscriberDisplay(subsOut, txt));
+    }
+
+    private CompletableFuture<String> fetchSubscribersFromWatchPage(String videoId) {
+        if (videoId == null || videoId.isEmpty()) return CompletableFuture.completedFuture(null);
+        String url = "https://www.youtube.com/watch?v=" + url(videoId) + "&hl=ko";
+        return httpGET(url, true).thenApply(html -> {
+            Map<String,Object> dict = YouTubeParsers.extractJSONDict(html, "ytInitialData");
+            if (dict != null) {
+                String txt = YouTubeParsers.findSubscriberText(dict);
+                if (txt != null) return YouTubeParsers.formatSubscribers(txt, nf);
+            }
+            dict = YouTubeParsers.extractJSONDict(html, "ytInitialPlayerResponse");
+            if (dict != null) {
+                String txt = YouTubeParsers.findSubscriberText(dict);
+                if (txt != null) return YouTubeParsers.formatSubscribers(txt, nf);
+            }
+            return null;
+        });
     }
 
     private CompletableFuture<String> fetchSubscribersViaInnertube(String channelId) {
@@ -229,7 +277,7 @@ public final class ViewerService {
             } catch (Exception e) {
                 return CompletableFuture.completedFuture(null);
             }
-        }).thenApply(pretty -> pretty == null ? null : "구독자: " + pretty + "명");
+        }).thenApply(pretty -> pretty == null ? null : pretty);
     }
 
     private CompletableFuture<String> scrapeSubscribersFromChannelURLs(String baseChannelURL, String preferChannelId) {
@@ -249,14 +297,14 @@ public final class ViewerService {
                 if (dict != null) {
                     String txt = YouTubeParsers.findSubscriberText(dict);
                     String pretty = YouTubeParsers.formatSubscribers(txt, nf);
-                    if (pretty != null) any.complete("구독자: "+pretty+"명");
+                    if (pretty != null) any.complete(pretty);
                 }
                 if (!any.isDone()) {
                     String raw = YouTubeParsers.extractSubscriberTextFromHTML(html);
                     String pretty = YouTubeParsers.formatSubscribers(raw, nf);
-                    if (pretty != null) any.complete("구독자: "+pretty+"명");
+                    if (pretty != null) any.complete(pretty);
                     else if (html.contains("구독자 비공개") || html.toLowerCase().contains("subscribers hidden"))
-                        any.complete("구독자: 비공개");
+                        any.complete("비공개");
                 }
                 return null;
             });
@@ -288,6 +336,7 @@ public final class ViewerService {
         return httpGET(u, true).thenApply(YouTubeParsers::extractChannelIdFromHTML);
     }
 
+    private static final class ChannelRef { final String channelUrl; final String channelId; ChannelRef(String u,String i){channelUrl=u;channelId=i;} }
     private static final class ChannelMeta { final String title; final String logoUrl; ChannelMeta(String t, String l){title=t;logoUrl=l;} }
     private CompletableFuture<ChannelMeta> fetchChannelMetaFallback(String videoId) {
         String u = "https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v="+url(videoId)+"&format=json";
@@ -333,4 +382,29 @@ public final class ViewerService {
     public ReadOnlyStringProperty channel2LogoUrlProperty() { return ch2Logo; }
     public ReadOnlyStringProperty video1TitleProperty() { return v1Title; }
     public ReadOnlyStringProperty video2TitleProperty() { return v2Title; }
+
+    private CompletableFuture<Optional<Long>> fetchConcurrentViewersInnertube(String videoId) {
+        if (videoId == null || videoId.isEmpty()) return CompletableFuture.completedFuture(Optional.empty());
+        String payload = "{" +
+                "\"context\":{\"client\":{\"clientName\":\"WEB\",\"clientVersion\":\"2.20240729.01.00\",\"hl\":\"ko\",\"gl\":\"KR\"}}," +
+                "\"videoId\":\"" + videoId + "\"}";
+        HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create("https://www.youtube.com/youtubei/v1/player?key=" + INNERTUBE_API_KEY))
+                .timeout(Duration.ofSeconds(10))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(payload));
+        DEFAULT_HEADERS.forEach(builder::header);
+        return http.sendAsync(builder.build(), HttpResponse.BodyHandlers.ofString())
+                .thenApply(resp -> {
+                    if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
+                        throw new RuntimeException("HTTP " + resp.statusCode());
+                    }
+                    try {
+                        JsonNode root = om.readTree(resp.body());
+                        Integer parsed = YouTubeParsers.findWatchingNowCount(root, videoId);
+                        if (parsed != null) return Optional.of(parsed.longValue());
+                    } catch (Exception ignore) {}
+                    return Optional.empty();
+                });
+    }
+
 }
