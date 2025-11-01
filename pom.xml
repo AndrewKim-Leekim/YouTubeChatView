@@ -15,7 +15,7 @@
         <javafx.platform>mac</javafx.platform>
         <jackson.version>2.17.1</jackson.version>
         <main.class>app.Main</main.class>
-        <app.icon>${project.basedir}/src/main/resources/MyApp.icons</app.icon>
+        <app.icon>${project.basedir}/src/main/resources/MyApp.icns</app.icon>
     </properties>
 
     <dependencies>
@@ -159,16 +159,16 @@
                                     <goal>exec</goal>
                                 </goals>
                                 <configuration>
-                                    <executable>jpackage</executable>
+                                    <executable>${java.home}/bin/jpackage</executable>
                                     <arguments>
                                         <argument>--type</argument>
-                                        <argument>app-image</argument>
+                                        <argument>dmg</argument>
                                         <argument>--name</argument>
                                         <argument>TubeMultiView</argument>
                                         <argument>--input</argument>
                                         <argument>${project.build.directory}</argument>
                                         <argument>--dest</argument>
-                                        <argument>${project.build.directory}</argument>
+                                        <argument>${project.build.directory}/jpackage</argument>
                                         <argument>--main-jar</argument>
                                         <argument>${project.build.finalName}.jar</argument>
                                         <argument>--main-class</argument>
