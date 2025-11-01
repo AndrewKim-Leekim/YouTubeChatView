@@ -13,10 +13,12 @@ public class Main extends Application {
         AppSettings settings = AppSettings.load();
 
         Runnable openSetup = () -> {
-            SetupView setup = new SetupView(settings, (apiKey, v1, v2) -> {
+            SetupView setup = new SetupView(settings, (apiKey, channel1, video1, channel2, video2) -> {
                 settings.apiKey = apiKey;
-                settings.video1 = v1;
-                settings.video2 = v2;
+                settings.channel1 = channel1;
+                settings.channel2 = channel2;
+                settings.video1 = video1;
+                settings.video2 = video2;
                 settings.save(); // WHY: Start 시 확정값 저장
                 ViewerService service = new ViewerService();
                 openMain(stage, service, settings);
@@ -27,7 +29,7 @@ public class Main extends Application {
             stage.show();
         };
 
-        boolean ready = !settings.apiKey.isEmpty() && !settings.video1.isEmpty() && !settings.video2.isEmpty();
+        boolean ready = !settings.video1.isEmpty() && !settings.video2.isEmpty();
         if (AUTOSTART_IF_ALL_FILLED && ready) {
             ViewerService service = new ViewerService();
             openMain(stage, service, settings);
