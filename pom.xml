@@ -142,12 +142,15 @@
                     <family>mac</family>
                 </os>
             </activation>
+            <properties>
+                <app.bundleId>app.ytmultichat</app.bundleId>
+            </properties>
             <build>
                 <plugins>
                     <plugin>
-                        <groupId>org.openjfx</groupId>
-                        <artifactId>javafx-maven-plugin</artifactId>
-                        <version>0.0.8</version>
+                        <groupId>org.panteleyev</groupId>
+                        <artifactId>jpackage-maven-plugin</artifactId>
+                        <version>1.10.0</version>
                         <executions>
                             <execution>
                                 <id>package-mac-app</id>
@@ -156,9 +159,18 @@
                                     <goal>jpackage</goal>
                                 </goals>
                                 <configuration>
-                                    <imageName>TubeMultiView</imageName>
-                                    <jpackageType>app-image</jpackageType>
+                                    <name>TubeMultiView</name>
+                                    <type>app-image</type>
+                                    <input>${project.build.directory}</input>
+                                    <destination>${project.build.directory}</destination>
+                                    <mainJar>${project.build.finalName}.jar</mainJar>
+                                    <mainClass>${main.class}</mainClass>
+                                    <runtimeImage>${project.build.directory}/yt-multichat</runtimeImage>
                                     <icon>${app.icon}</icon>
+                                    <classPath>lib/*</classPath>
+                                    <macAppImage>
+                                        <bundleIdentifier>${app.bundleId}</bundleIdentifier>
+                                    </macAppImage>
                                 </configuration>
                             </execution>
                         </executions>
