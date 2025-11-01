@@ -38,7 +38,7 @@ java \
 target/yt-multichat/bin/yt-multichat
 ```
 
-`.app` 번들과 `.dmg` 이미지는 같은 패키징 단계에서 `target/jpackage/` 아래에 생성됩니다.
+`.app` 번들과 `.dmg` 이미지는 같은 패키징 단계에서 `target/jpackage/` 아래에 생성됩니다. Maven은 macOS에서 자동으로 `scripts/macos-jpackage.sh`을 실행하여 `jpackage`를 호출하고, 기본값으로 ad-hoc(`-`) 서명을 적용합니다.
 
 * `target/jpackage/TubeMultiView.app` – 로컬 실행 및 서명 대상 번들
 * `target/jpackage/TubeMultiView-1.0.0.dmg` – 배포용 디스크 이미지
@@ -46,10 +46,13 @@ target/yt-multichat/bin/yt-multichat
 빌드 직후에는 ad-hoc 서명이 자동으로 적용되어 macOS가 "앱이 수정 또는 손상되었습니다" 같은 보안 경고를 띄우지 않습니다. Apple Developer ID 인증서로 정식 서명을 하려면 다음과 같이 실행하세요.
 
 ```bash
-mvn -Dmac.sign.identity="Developer ID Application: Your Name (TEAMID)" clean package
+mvn \
+  -Dmac.sign.identity="Developer ID Application: Your Name (TEAMID)" \
+  -Dmac.sign.keychain="/Users/you/Library/Keychains/login.keychain-db" \
+  clean package
 ```
 
-명시한 인증서는 `codesign --options runtime`으로 `.app` 번들에 적용된 뒤, 같은 번들을 이용해 `.dmg`가 다시 만들어집니다. 추가 배포 형식이 필요하면 `target/jpackage/TubeMultiView.app`를 기반으로 직접 `jpackage`를 재실행하거나 `hdiutil`을 사용할 수 있습니다.
+`mac.sign.identity`를 비우면(`-Dmac.sign.identity=`) 서명을 건너뛰며, `mac.sign.keychain`은 선택 사항입니다. 명시한 인증서는 `codesign --options runtime`으로 `.app` 번들에 적용된 뒤, 동일한 번들을 기반으로 `.dmg`가 다시 생성됩니다. 추가 배포 형식이 필요하면 `target/jpackage/TubeMultiView.app`를 기반으로 직접 `jpackage`를 재실행하거나 `hdiutil`을 사용할 수 있습니다.
 
 ## 종료 시 주의
 애플리케이션을 닫을 때는 창 메뉴의 **Quit**(⌘+Q) 또는 창 닫기 버튼을 사용해 정상 종료하세요. 백그라운드 업데이트 스케줄러가 함께 내려가며, Preferences에 저장된 API 키/영상 ID 정보는 유지됩니다.
