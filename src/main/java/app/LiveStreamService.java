@@ -4,6 +4,8 @@ package app;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import app.YouTubeParsers;
+
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -348,10 +350,6 @@ public final class LiveStreamService {
 
     private record ChannelRef(String channelId, String handle, String customPath) {
         private static final ChannelRef EMPTY = new ChannelRef("", "", "");
-
-        String channelId() { return channelId; }
-        String handle() { return handle; }
-        String customPath() { return customPath; }
 
         List<String> scrapePaths() {
             if (channelId.isBlank() && handle.isBlank() && customPath.isBlank()) {
