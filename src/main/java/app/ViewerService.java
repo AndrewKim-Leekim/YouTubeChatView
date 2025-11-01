@@ -49,6 +49,16 @@ public final class ViewerService {
     private final SimpleStringProperty v1Title = new SimpleStringProperty(" ");
     private final SimpleStringProperty v2Title = new SimpleStringProperty(" ");
 
+    private void updateSubscriberDisplay(SimpleStringProperty subsOut, String txt) {
+        if (txt == null || txt.isBlank()) return;
+        Platform.runLater(() -> {
+            String current = subsOut.get();
+            if ("비공개".equals(current)) return;
+            if ("비공개".equals(txt) && current != null && !current.isBlank() && !"—".equals(current)) return;
+            subsOut.set(txt);
+        });
+    }
+
     public void start(String apiKey, String v1, String v2) {
         this.apiKey = apiKey == null ? "" : apiKey.trim();
         this.v1 = v1 == null ? "" : v1.trim();
@@ -101,12 +111,12 @@ public final class ViewerService {
         return httpGET(u, true).thenApply(html -> {
             Map<String,Object> dict = YouTubeParsers.extractJSONDict(html, "ytInitialPlayerResponse");
             if (dict != null) {
-                Integer n = YouTubeParsers.findWatchingNowCount(dict);
+                Integer n = YouTubeParsers.findWatchingNowCount(dict, videoId);
                 if (n != null) return Optional.of(n.longValue());
             }
             dict = YouTubeParsers.extractJSONDict(html, "ytInitialData");
             if (dict != null) {
-                Integer n = YouTubeParsers.findWatchingNowCount(dict);
+                Integer n = YouTubeParsers.findWatchingNowCount(dict, videoId);
                 if (n != null) return Optional.of(n.longValue());
             }
             return Optional.empty();
@@ -133,6 +143,10 @@ public final class ViewerService {
                         String vTitle = snip.path("title").asText(" ");
                         Platform.runLater(() -> { chNameOut.set(chTitle); vTitleOut.set(vTitle); });
 
+                        fetchSubscribersFromWatchPage(videoId)
+                                .exceptionally(ex -> null)
+                                .thenAccept(txt -> updateSubscriberDisplay(subsOut, txt));
+
                         String c1 = "https://www.googleapis.com/youtube/v3/channels?part=snippet&id="+url(chId)+"&key="+url(apiKey);
                         httpGET(c1).thenAccept(cBody -> {
                             try {
@@ -157,13 +171,10 @@ public final class ViewerService {
                                         Platform.runLater(() -> subsOut.set(pretty));
                                         return;
                                     }
-                                    fetchSubscribersViaInnertube(chId).thenAccept(txt -> {
-                                        if (txt != null) Platform.runLater(() -> subsOut.set(txt));
-                                        else scrapeSubscribersFromChannelURLs("https://www.youtube.com/channel/"+chId, chId)
-                                                .thenAccept(txt2 -> { if (txt2 != null) Platform.runLater(() -> subsOut.set(txt2)); });
-                                    });
+                                    chainSubscriberLookups(chId, "https://www.youtube.com/channel/"+chId, subsOut);
                                 }
                             } catch (Exception ignore) {}
+                            chainSubscriberLookups(chId, "https://www.youtube.com/channel/"+chId, subsOut);
                         });
                         return;
                     }
@@ -189,13 +200,48 @@ public final class ViewerService {
             }
         });
         fetchVideoOEmbed(videoId).thenAccept(t -> Platform.runLater(() -> vTitleOut.set(t == null ? " " : t)));
-        fetchAuthorURLFromVideo(videoId).thenCompose(chURL -> resolveChannelId(chURL).thenCompose(uc -> {
-            if (uc != null) return fetchSubscribersViaInnertube(uc)
-                    .thenApply(txt -> txt != null ? txt : null)
-                    .thenCompose(txt -> txt != null ? CompletableFuture.completedFuture(txt)
-                            : scrapeSubscribersFromChannelURLs(chURL == null ? "" : chURL, uc));
-            return scrapeSubscribersFromChannelURLs(chURL == null ? "" : chURL, null);
-        })).thenAccept(txt -> { if (txt != null) Platform.runLater(() -> subsOut.set(txt)); });
+        fetchSubscribersFromWatchPage(videoId)
+                .exceptionally(ex -> null)
+                .thenAccept(txt -> updateSubscriberDisplay(subsOut, txt));
+        fetchAuthorURLFromVideo(videoId).thenCompose(chURL -> resolveChannelId(chURL)
+                .thenApply(uc -> new ChannelRef(chURL, uc)))
+                .thenAccept(ref -> chainSubscriberLookups(ref.channelId, ref.channelUrl, subsOut));
+    }
+
+    private void chainSubscriberLookups(String channelId, String channelUrl,
+                                        SimpleStringProperty subsOut) {
+        String baseUrl = channelUrl == null ? "" : channelUrl;
+        CompletableFuture<String> next;
+        if (channelId != null && !channelId.isEmpty()) {
+            next = fetchSubscribersViaInnertube(channelId)
+                    .thenCompose(txt -> txt != null
+                            ? CompletableFuture.completedFuture(txt)
+                            : scrapeSubscribersFromChannelURLs(baseUrl.isEmpty()
+                            ? "https://www.youtube.com/channel/" + channelId
+                            : baseUrl, channelId));
+        } else {
+            next = scrapeSubscribersFromChannelURLs(baseUrl, null);
+        }
+        next = next.exceptionally(ex -> null);
+        next.thenAccept(txt -> updateSubscriberDisplay(subsOut, txt));
+    }
+
+    private CompletableFuture<String> fetchSubscribersFromWatchPage(String videoId) {
+        if (videoId == null || videoId.isEmpty()) return CompletableFuture.completedFuture(null);
+        String url = "https://www.youtube.com/watch?v=" + url(videoId) + "&hl=ko";
+        return httpGET(url, true).thenApply(html -> {
+            Map<String,Object> dict = YouTubeParsers.extractJSONDict(html, "ytInitialData");
+            if (dict != null) {
+                String txt = YouTubeParsers.findSubscriberText(dict);
+                if (txt != null) return YouTubeParsers.formatSubscribers(txt, nf);
+            }
+            dict = YouTubeParsers.extractJSONDict(html, "ytInitialPlayerResponse");
+            if (dict != null) {
+                String txt = YouTubeParsers.findSubscriberText(dict);
+                if (txt != null) return YouTubeParsers.formatSubscribers(txt, nf);
+            }
+            return null;
+        });
     }
 
     private CompletableFuture<String> fetchSubscribersViaInnertube(String channelId) {
@@ -290,6 +336,7 @@ public final class ViewerService {
         return httpGET(u, true).thenApply(YouTubeParsers::extractChannelIdFromHTML);
     }
 
+    private static final class ChannelRef { final String channelUrl; final String channelId; ChannelRef(String u,String i){channelUrl=u;channelId=i;} }
     private static final class ChannelMeta { final String title; final String logoUrl; ChannelMeta(String t, String l){title=t;logoUrl=l;} }
     private CompletableFuture<ChannelMeta> fetchChannelMetaFallback(String videoId) {
         String u = "https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v="+url(videoId)+"&format=json";
@@ -353,40 +400,11 @@ public final class ViewerService {
                     }
                     try {
                         JsonNode root = om.readTree(resp.body());
-                        Optional<Long> direct = findConcurrentViewCount(root);
-                        if (direct.isPresent()) return direct;
-                        Integer alt = YouTubeParsers.findWatchingNowCount(root);
-                        if (alt != null) return Optional.of(alt.longValue());
+                        Integer parsed = YouTubeParsers.findWatchingNowCount(root, videoId);
+                        if (parsed != null) return Optional.of(parsed.longValue());
                     } catch (Exception ignore) {}
                     return Optional.empty();
                 });
-    }
-
-    private Optional<Long> findConcurrentViewCount(JsonNode node) {
-        if (node == null || node.isMissingNode()) {
-            return Optional.empty();
-        }
-        if (node.isObject()) {
-            JsonNode direct = node.get("concurrentViewCount");
-            if (direct != null) {
-                String txt = direct.asText("");
-                if (!txt.isBlank()) {
-                    try { return Optional.of(Long.parseLong(txt.replace(",", ""))); }
-                    catch (NumberFormatException ignore) {}
-                }
-            }
-            Iterator<Map.Entry<String, JsonNode>> it = node.fields();
-            while (it.hasNext()) {
-                Optional<Long> nested = findConcurrentViewCount(it.next().getValue());
-                if (nested.isPresent()) return nested;
-            }
-        } else if (node.isArray()) {
-            for (JsonNode child : node) {
-                Optional<Long> nested = findConcurrentViewCount(child);
-                if (nested.isPresent()) return nested;
-            }
-        }
-        return Optional.empty();
     }
 
 }

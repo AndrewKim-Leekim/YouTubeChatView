@@ -34,37 +34,76 @@ public final class YouTubeParsers {
         } catch (Exception e) { return null; }
     }
 
-    public static Integer findWatchingNowCount(Object any) {
+    public static Integer findWatchingNowCount(Object any) { return findWatchingNowCount(any, null); }
+
+    public static Integer findWatchingNowCount(Object any, String targetVideoId) {
         if (any instanceof Map) {
             Map<?,?> m = (Map<?,?>) any;
+            if (!matchesVideo(targetVideoId, m)) return null;
+
+            Integer direct = parseConcurrent(m.get("concurrentViewCount"));
+            if (direct != null) return direct;
+
             Object vvr = m.get("videoViewCountRenderer");
             if (vvr instanceof Map) {
                 Integer n = extractCountFromViewCount((Map<?, ?>) vvr);
                 if (n != null) return n;
             }
+
+            Object primary = m.get("videoPrimaryInfoRenderer");
+            if (primary != null) {
+                Integer n = findWatchingNowCount(primary, targetVideoId);
+                if (n != null) return n;
+            }
+
+            Object liveDetails = m.get("liveBroadcastDetails");
+            if (liveDetails != null) {
+                Integer n = findWatchingNowCount(liveDetails, targetVideoId);
+                if (n != null) return n;
+            }
+
             for (Object v : m.values()) {
-                Integer n = findWatchingNowCount(v);
+                Integer n = findWatchingNowCount(v, targetVideoId);
                 if (n != null) return n;
             }
         } else if (any instanceof List) {
             for (Object v : (List<?>) any) {
-                Integer n = findWatchingNowCount(v);
+                Integer n = findWatchingNowCount(v, targetVideoId);
                 if (n != null) return n;
             }
         } else if (any instanceof JsonNode) {
             JsonNode node = (JsonNode) any;
+            if (!matchesVideo(targetVideoId, node)) return null;
+
+            Integer direct = parseConcurrent(node.get("concurrentViewCount"));
+            if (direct != null) return direct;
+
             JsonNode vvr = node.get("videoViewCountRenderer");
             if (vvr != null) {
                 Integer n = extractCountFromViewCount(vvr);
                 if (n != null) return n;
             }
-            if (node.isArray()) for (JsonNode ch : node) {
-                Integer n = findWatchingNowCount(ch);
+
+            JsonNode primary = node.get("videoPrimaryInfoRenderer");
+            if (primary != null) {
+                Integer n = findWatchingNowCount(primary, targetVideoId);
                 if (n != null) return n;
             }
+
+            JsonNode liveDetails = node.get("liveBroadcastDetails");
+            if (liveDetails != null && !liveDetails.isMissingNode()) {
+                Integer n = findWatchingNowCount(liveDetails, targetVideoId);
+                if (n != null) return n;
+            }
+
+            if (node.isArray()) for (JsonNode ch : node) {
+                Integer n = findWatchingNowCount(ch, targetVideoId);
+                if (n != null) return n;
+            }
+
             Iterator<Map.Entry<String, JsonNode>> it = node.fields();
             while (it.hasNext()) {
-                Integer n = findWatchingNowCount(it.next().getValue());
+                Integer n = findWatchingNowCount(it.next().getValue(), targetVideoId);
                 if (n != null) return n;
             }
         }
@@ -145,6 +184,70 @@ public final class YouTubeParsers {
             return v == null ? null : v.intValue();
         }
         return null;
+    }
+
+    private static Integer parseConcurrent(Object raw) {
+        if (raw == null) return null;
+        if (raw instanceof Number) {
+            long val = ((Number) raw).longValue();
+            if (val <= 0) return null;
+            return val > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) val;
+        }
+        if (raw instanceof String) {
+            String txt = ((String) raw).trim();
+            if (txt.isEmpty()) return null;
+            String digits = txt.replaceAll("[^0-9.]", "");
+            if (digits.isEmpty()) return null;
+            try {
+                double val = Double.parseDouble(digits);
+                if (val <= 0d) return null;
+                long rounded = Math.round(val);
+                return rounded > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) rounded;
+            } catch (NumberFormatException ignore) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private static boolean matchesVideo(String targetVideoId, Map<?,?> node) {
+        if (targetVideoId == null || targetVideoId.isEmpty() || node == null) return true;
+        Object vid = node.get("videoId");
+        if (vid instanceof String && !targetVideoId.equals(vid)) return false;
+        Object endpoint = node.get("watchEndpoint");
+        if (endpoint instanceof Map) {
+            Object id2 = ((Map<?, ?>) endpoint).get("videoId");
+            if (id2 instanceof String && !targetVideoId.equals(id2)) return false;
+        }
+        Object browse = node.get("navigationEndpoint");
+        if (browse instanceof Map) {
+            Object watch = ((Map<?, ?>) browse).get("watchEndpoint");
+            if (watch instanceof Map) {
+                Object id3 = ((Map<?, ?>) watch).get("videoId");
+                if (id3 instanceof String && !targetVideoId.equals(id3)) return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean matchesVideo(String targetVideoId, JsonNode node) {
+        if (targetVideoId == null || targetVideoId.isEmpty() || node == null || node.isMissingNode()) return true;
+        JsonNode vid = node.get("videoId");
+        if (vid != null && vid.isTextual() && !targetVideoId.equals(vid.asText())) return false;
+        JsonNode endpoint = node.get("watchEndpoint");
+        if (endpoint != null) {
+            JsonNode id2 = endpoint.get("videoId");
+            if (id2 != null && id2.isTextual() && !targetVideoId.equals(id2.asText())) return false;
+        }
+        JsonNode nav = node.get("navigationEndpoint");
+        if (nav != null) {
+            JsonNode watch = nav.get("watchEndpoint");
+            if (watch != null) {
+                JsonNode id3 = watch.get("videoId");
+                if (id3 != null && id3.isTextual() && !targetVideoId.equals(id3.asText())) return false;
+            }
+        }
+        return true;
     }
 
     private static Long normalizeNumber(String num, String suffix) {
