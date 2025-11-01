@@ -15,7 +15,7 @@
         <javafx.platform>mac</javafx.platform>
         <jackson.version>2.17.1</jackson.version>
         <main.class>app.Main</main.class>
-        <app.icon>${project.basedir}/src/main/resources/MyApp.icns</app.icon>
+        <app.icon>${project.basedir}/src/main/resources/MyApp.icons</app.icon>
     </properties>
 
     <dependencies>
@@ -148,29 +148,40 @@
             <build>
                 <plugins>
                     <plugin>
-                        <groupId>org.panteleyev</groupId>
-                        <artifactId>jpackage-maven-plugin</artifactId>
-                        <version>1.10.0</version>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>3.3.0</version>
                         <executions>
                             <execution>
-                                <id>package-mac-app</id>
+                                <id>jpackage-mac-app</id>
                                 <phase>package</phase>
                                 <goals>
-                                    <goal>jpackage</goal>
+                                    <goal>exec</goal>
                                 </goals>
                                 <configuration>
-                                    <name>TubeMultiView</name>
-                                    <type>app-image</type>
-                                    <input>${project.build.directory}</input>
-                                    <destination>${project.build.directory}</destination>
-                                    <mainJar>${project.build.finalName}.jar</mainJar>
-                                    <mainClass>${main.class}</mainClass>
-                                    <runtimeImage>${project.build.directory}/yt-multichat</runtimeImage>
-                                    <icon>${app.icon}</icon>
-                                    <classPath>lib/*</classPath>
-                                    <macAppImage>
-                                        <bundleIdentifier>${app.bundleId}</bundleIdentifier>
-                                    </macAppImage>
+                                    <executable>jpackage</executable>
+                                    <arguments>
+                                        <argument>--type</argument>
+                                        <argument>app-image</argument>
+                                        <argument>--name</argument>
+                                        <argument>TubeMultiView</argument>
+                                        <argument>--input</argument>
+                                        <argument>${project.build.directory}</argument>
+                                        <argument>--dest</argument>
+                                        <argument>${project.build.directory}</argument>
+                                        <argument>--main-jar</argument>
+                                        <argument>${project.build.finalName}.jar</argument>
+                                        <argument>--main-class</argument>
+                                        <argument>${main.class}</argument>
+                                        <argument>--runtime-image</argument>
+                                        <argument>${project.build.directory}/yt-multichat</argument>
+                                        <argument>--class-path</argument>
+                                        <argument>lib/*</argument>
+                                        <argument>--icon</argument>
+                                        <argument>${app.icon}</argument>
+                                        <argument>--mac-package-identifier</argument>
+                                        <argument>${app.bundleId}</argument>
+                                    </arguments>
                                 </configuration>
                             </execution>
                         </executions>
