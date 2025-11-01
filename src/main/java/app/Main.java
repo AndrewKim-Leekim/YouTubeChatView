@@ -1,7 +1,10 @@
 // File: src/main/java/app/Main.java
 package app;
 
+import java.awt.Taskbar;
+
 import javafx.application.Application;
+import javafx.embed.swing.SwingFXUtils;
 import javafx.scene.Scene;
 import javafx.scene.SnapshotParameters;
 import javafx.scene.canvas.Canvas;
@@ -18,7 +21,9 @@ public class Main extends Application {
 
     @Override public void start(Stage stage) {
         AppSettings settings = AppSettings.load();
-        stage.getIcons().setAll(appIcon());
+        Image icon = appIcon();
+        stage.getIcons().setAll(icon);
+        applyDockIcon(icon);
 
         Runnable openSetup = () -> {
             SetupView setup = new SetupView(settings, (apiKey, channel1, video1, channel2, video2) -> {
@@ -86,6 +91,21 @@ public class Main extends Application {
         WritableImage img = new WritableImage(size, size);
         APP_ICON = canvas.snapshot(params, img);
         return APP_ICON;
+    }
+
+    private static void applyDockIcon(Image fxIcon) {
+        if (fxIcon == null) return;
+        try {
+            if (!Taskbar.isTaskbarSupported()) return;
+            Taskbar taskbar = Taskbar.getTaskbar();
+            if (!taskbar.isSupported(Taskbar.Feature.ICON_IMAGE)) return;
+            java.awt.Image awtImage = SwingFXUtils.fromFXImage(fxIcon, null);
+            if (awtImage != null) {
+                taskbar.setIconImage(awtImage);
+            }
+        } catch (Throwable ignore) {
+            // Dock icon customization best-effort; ignore failures on unsupported platforms.
+        }
     }
 
     public static void main(String[] args) { launch(args); }
