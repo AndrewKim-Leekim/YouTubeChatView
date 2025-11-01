@@ -35,8 +35,8 @@ public final class SetupView {
     private final TextField tfChannel2 = new TextField();
     private final ComboBox<LiveStreamService.LiveStream> cbLive1 = new ComboBox<>();
     private final ComboBox<LiveStreamService.LiveStream> cbLive2 = new ComboBox<>();
-    private final Label status1 = tinyLabel("채널 ID를 입력한 뒤 🔁 버튼으로 확인하세요.");
-    private final Label status2 = tinyLabel("채널 ID를 입력한 뒤 🔁 버튼으로 확인하세요.");
+    private final Label status1 = tinyLabel("채널 ID 또는 핸들을 입력한 뒤 🔁 버튼으로 확인하세요.");
+    private final Label status2 = tinyLabel("채널 ID 또는 핸들을 입력한 뒤 🔁 버튼으로 확인하세요.");
     private final Label selected1 = tinyLabel("🎬 선택된 방송이 없습니다.");
     private final Label selected2 = tinyLabel("🎬 선택된 방송이 없습니다.");
     private final LiveStreamService liveService = new LiveStreamService();
@@ -54,7 +54,7 @@ public final class SetupView {
 
         Label title = new Label("✨ YouTube Multi ChatViewer");
         title.setStyle("-fx-font-size:26px; -fx-font-weight:bold; -fx-text-fill:#1e293b;");
-        Label tagline = new Label("채널 ID만 입력하면 실시간 방송을 바로 연결할 수 있어요.");
+        Label tagline = new Label("채널 ID나 @핸들만 입력하면 실시간 방송을 바로 연결할 수 있어요.");
         tagline.setStyle("-fx-font-size:14px; -fx-text-fill:#475569;");
 
         tfApiShow.setText(settings.apiKey);
@@ -136,8 +136,8 @@ public final class SetupView {
 
         HBox row = new HBox(10);
         row.setAlignment(Pos.CENTER_LEFT);
-        Label lbl = wideLabel("🆔 채널 ID");
-        channelField.setPromptText("예: UC_x5XG1OV2P6uZZ5FSM9Ttw");
+        Label lbl = wideLabel("🆔 채널 ID / 핸들");
+        channelField.setPromptText("예: UC_x5XG1OV2P6uZZ5FSM9Ttw 또는 @GoogleDevelopers");
         HBox.setHgrow(channelField, Priority.ALWAYS);
         Button refresh = pillButton("🔁 라이브 찾기");
         refresh.setOnAction(e -> lookupLive(channelField, combo, status, selected, refresh,
@@ -161,7 +161,7 @@ public final class SetupView {
             if (!Objects.equals(old, val)) {
                 combo.getItems().clear();
                 combo.setValue(null);
-                status.setText("채널 ID를 입력한 뒤 🔁 버튼으로 확인하세요.");
+                status.setText("채널 ID 또는 핸들을 입력한 뒤 🔁 버튼으로 확인하세요.");
             }
         });
 
@@ -227,7 +227,7 @@ public final class SetupView {
                             String preferVideoId) {
         String channelId = channelField.getText() == null ? "" : channelField.getText().trim();
         if (channelId.isEmpty()) {
-            status.setText("⚠️ 채널 ID를 입력해주세요.");
+            status.setText("⚠️ 채널 ID 또는 핸들을 입력해주세요.");
             combo.getItems().clear();
             combo.setValue(null);
             selected.setText("🎬 선택된 방송이 없습니다.");
