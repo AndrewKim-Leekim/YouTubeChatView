@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <!-- File: pom.xml (Intel/Apple Silicon macOS 대응) -->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -14,10 +15,11 @@
         <javafx.platform>mac</javafx.platform>
         <jackson.version>2.17.1</jackson.version>
         <main.class>app.Main</main.class>
+        <app.icon>${project.basedir}/src/main/resources/MyApp.icns</app.icon>
     </properties>
 
     <dependencies>
-        <!-- JavaFX: 기본값은 Intel macOS -->
+        <!-- JavaFX modules: default to Intel macOS runtime -->
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-base</artifactId>
@@ -48,6 +50,7 @@
             <artifactId>jackson-databind</artifactId>
             <version>${jackson.version}</version>
         </dependency>
+        <!-- Add new runtime dependencies above this comment to keep the closing tags intact -->
     </dependencies>
 
     <build>
@@ -121,9 +124,68 @@
     <profiles>
         <profile>
             <id>mac-aarch64</id>
+            <activation>
+                <os>
+                    <family>mac</family>
+                    <arch>aarch64</arch>
+                </os>
+            </activation>
             <properties>
                 <javafx.platform>mac-aarch64</javafx.platform>
             </properties>
+        </profile>
+
+        <profile>
+            <id>mac-app-image</id>
+            <activation>
+                <os>
+                    <family>mac</family>
+                </os>
+            </activation>
+            <properties>
+                <app.bundleId>app.ytmultichat</app.bundleId>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>3.3.0</version>
+                        <executions>
+                            <execution>
+                                <id>jpackage-mac-app</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>${java.home}/bin/jpackage</executable>
+                                    <arguments>
+                                        <argument>--type</argument>
+                                        <argument>dmg</argument>
+                                        <argument>--name</argument>
+                                        <argument>TubeMultiView</argument>
+                                        <argument>--input</argument>
+                                        <argument>${project.build.directory}</argument>
+                                        <argument>--dest</argument>
+                                        <argument>${project.build.directory}/jpackage</argument>
+                                        <argument>--main-jar</argument>
+                                        <argument>${project.build.finalName}.jar</argument>
+                                        <argument>--main-class</argument>
+                                        <argument>${main.class}</argument>
+                                        <argument>--runtime-image</argument>
+                                        <argument>${project.build.directory}/yt-multichat</argument>
+                                        <argument>--icon</argument>
+                                        <argument>${app.icon}</argument>
+                                        <argument>--mac-package-identifier</argument>
+                                        <argument>${app.bundleId}</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
         </profile>
     </profiles>
 </project>
