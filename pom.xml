@@ -20,7 +20,7 @@
         <app.icon>${project.basedir}/src/main/resources/MyApp.icns</app.icon>
         <mac.package.identifier>app.tubemultiview</mac.package.identifier>
         <jpackage.output>${project.build.directory}/jpackage</jpackage.output>
-        <mac.sign.identity>-</mac.sign.identity>
+        <mac.sign.identity></mac.sign.identity>
         <mac.sign.keychain></mac.sign.keychain>
     </properties>
 

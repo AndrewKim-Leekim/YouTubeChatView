@@ -10,8 +10,14 @@ set -euo pipefail
 : "${DEST:?DEST is required}"
 : "${MAC_PACKAGE_IDENTIFIER:?MAC_PACKAGE_IDENTIFIER is required}"
 
-SIGN_IDENTITY=${MAC_SIGN_IDENTITY:-}
-SIGN_KEYCHAIN=${MAC_SIGN_KEYCHAIN:-}
+trim() {
+  local value="$1"
+  # shellcheck disable=SC2001
+  echo "${value}" | sed 's/^\s\+//;s/\s\+$//'
+}
+
+SIGN_IDENTITY=$(trim "${MAC_SIGN_IDENTITY:-}")
+SIGN_KEYCHAIN=$(trim "${MAC_SIGN_KEYCHAIN:-}")
 
 if [[ -z "${JAVA_HOME:-}" ]]; then
   if command -v /usr/libexec/java_home >/dev/null 2>&1; then
