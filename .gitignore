@@ -30,3 +30,5 @@ bin/
 .DS_Storetarget/
 *.dmg
 *.jar
+target/
+*.zip
