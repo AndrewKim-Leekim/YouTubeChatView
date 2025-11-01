@@ -23,7 +23,10 @@ public class Main extends Application {
                 ViewerService service = new ViewerService();
                 openMain(stage, service, settings);
             });
-            stage.setScene(new Scene(setup.getRoot(), 960, 640));
+            Scene scene = new Scene(setup.getRoot(), 1100, 760);
+            stage.setScene(scene);
+            stage.setMinWidth(960);
+            stage.setMinHeight(700);
             stage.setTitle("Setup");
             stage.setOnCloseRequest(e -> { e.consume(); ConfirmDialogs.askQuit(stage); });
             stage.show();

@@ -24,6 +24,7 @@ public final class ViewerService {
             "Accept-Language", "ko-KR,ko;q=0.9,en-US;q=0.6,en;q=0.5",
             "Cookie", "CONSENT=YES+cb.20210328-17-p0.en+F+678"
     );
+    private static final String INNERTUBE_API_KEY = "AIzaSyAO_FJ2SlqU1d76aAPkbD-fD-6I2yiqZ7Q";
 
     private final HttpClient http = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
@@ -70,7 +71,10 @@ public final class ViewerService {
     private void refreshOne(String videoId, SimpleStringProperty out) {
         fetchConcurrentViewersAPI(videoId)
                 .thenCompose(opt -> opt.isPresent() ? CompletableFuture.completedFuture(opt)
-                        : scrapeWatchPageWatchersJSON(videoId))
+                        : fetchConcurrentViewersInnertube(videoId)
+                                .thenCompose(opt2 -> opt2.isPresent()
+                                        ? CompletableFuture.completedFuture(opt2)
+                                        : scrapeWatchPageWatchersJSON(videoId)))
                 .exceptionally(ex -> { System.err.println("[viewers] "+ex); return Optional.empty(); })
                 .thenAccept(opt -> Platform.runLater(() -> {
                     String value = opt.map(nf::format).orElse("—");
@@ -333,4 +337,58 @@ public final class ViewerService {
     public ReadOnlyStringProperty channel2LogoUrlProperty() { return ch2Logo; }
     public ReadOnlyStringProperty video1TitleProperty() { return v1Title; }
     public ReadOnlyStringProperty video2TitleProperty() { return v2Title; }
+
+    private CompletableFuture<Optional<Long>> fetchConcurrentViewersInnertube(String videoId) {
+        if (videoId == null || videoId.isEmpty()) return CompletableFuture.completedFuture(Optional.empty());
+        String payload = "{" +
+                "\"context\":{\"client\":{\"clientName\":\"WEB\",\"clientVersion\":\"2.20240729.01.00\",\"hl\":\"ko\",\"gl\":\"KR\"}}," +
+                "\"videoId\":\"" + videoId + "\"}";
+        HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create("https://www.youtube.com/youtubei/v1/player?key=" + INNERTUBE_API_KEY))
+                .timeout(Duration.ofSeconds(10))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(payload));
+        DEFAULT_HEADERS.forEach(builder::header);
+        return http.sendAsync(builder.build(), HttpResponse.BodyHandlers.ofString())
+                .thenApply(resp -> {
+                    if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
+                        throw new RuntimeException("HTTP " + resp.statusCode());
+                    }
+                    try {
+                        JsonNode root = om.readTree(resp.body());
+                        Optional<Long> direct = findConcurrentViewCount(root);
+                        if (direct.isPresent()) return direct;
+                        Integer alt = YouTubeParsers.findWatchingNowCount(root);
+                        if (alt != null) return Optional.of(alt.longValue());
+                    } catch (Exception ignore) {}
+                    return Optional.empty();
+                });
+    }
+
+    private Optional<Long> findConcurrentViewCount(JsonNode node) {
+        if (node == null || node.isMissingNode()) {
+            return Optional.empty();
+        }
+        if (node.isObject()) {
+            JsonNode direct = node.get("concurrentViewCount");
+            if (direct != null) {
+                String txt = direct.asText("");
+                if (!txt.isBlank()) {
+                    try { return Optional.of(Long.parseLong(txt.replace(",", ""))); }
+                    catch (NumberFormatException ignore) {}
+                }
+            }
+            Iterator<Map.Entry<String, JsonNode>> it = node.fields();
+            while (it.hasNext()) {
+                Optional<Long> nested = findConcurrentViewCount(it.next().getValue());
+                if (nested.isPresent()) return nested;
+            }
+        } else if (node.isArray()) {
+            for (JsonNode child : node) {
+                Optional<Long> nested = findConcurrentViewCount(child);
+                if (nested.isPresent()) return nested;
+            }
+        }
+        return Optional.empty();
+    }
+
 }

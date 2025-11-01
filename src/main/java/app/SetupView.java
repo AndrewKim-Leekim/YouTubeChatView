@@ -48,9 +48,10 @@ public final class SetupView {
         root.setPadding(new Insets(32));
         root.setAlignment(Pos.TOP_CENTER);
         root.setStyle("-fx-background-color: linear-gradient(to bottom right, #eef2ff, #f8fafc);");
-        root.setMinWidth(820);
-        root.setPrefWidth(880);
-        root.setMinHeight(560);
+        root.setMinWidth(920);
+        root.setPrefWidth(1020);
+        root.setMinHeight(640);
+        root.setPrefHeight(720);
 
         Label title = new Label("✨ YouTube Multi ChatViewer");
         title.setStyle("-fx-font-size:26px; -fx-font-weight:bold; -fx-text-fill:#1e293b;");
