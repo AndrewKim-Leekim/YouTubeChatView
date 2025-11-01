@@ -16,6 +16,7 @@
         <jackson.version>2.17.1</jackson.version>
         <main.class>app.Main</main.class>
         <app.icon>${project.basedir}/src/main/resources/MyApp.icns</app.icon>
+        <mac.sign.identity></mac.sign.identity>
     </properties>
 
     <dependencies>
@@ -159,27 +160,55 @@
                                     <goal>exec</goal>
                                 </goals>
                                 <configuration>
-                                    <executable>${java.home}/bin/jpackage</executable>
+                                    <executable>/bin/bash</executable>
                                     <arguments>
-                                        <argument>--type</argument>
-                                        <argument>dmg</argument>
-                                        <argument>--name</argument>
-                                        <argument>TubeMultiView</argument>
-                                        <argument>--input</argument>
-                                        <argument>${project.build.directory}</argument>
-                                        <argument>--dest</argument>
-                                        <argument>${project.build.directory}/jpackage</argument>
-                                        <argument>--main-jar</argument>
-                                        <argument>${project.build.finalName}.jar</argument>
-                                        <argument>--main-class</argument>
-                                        <argument>${main.class}</argument>
-                                        <argument>--runtime-image</argument>
-                                        <argument>${project.build.directory}/yt-multichat</argument>
-                                        <argument>--icon</argument>
-                                        <argument>${app.icon}</argument>
-                                        <argument>--mac-package-identifier</argument>
-                                        <argument>${app.bundleId}</argument>
+                                        <argument>-c</argument>
+                                        <argument><![CDATA[
+set -euo pipefail
+
+APP_NAME="TubeMultiView"
+APP_BUNDLE="${APP_NAME}.app"
+APP_DIR="${project.build.directory}/jpackage"
+
+mkdir -p "${APP_DIR}"
+
+"${java.home}/bin/jpackage" \
+  --type app-image \
+  --name "${APP_NAME}" \
+  --input "${project.build.directory}" \
+  --main-jar "${project.build.finalName}.jar" \
+  --main-class "${main.class}" \
+  --runtime-image "${project.build.directory}/yt-multichat" \
+  --icon "${app.icon}" \
+  --dest "${APP_DIR}" \
+  --app-version "${project.version}" \
+  --mac-package-identifier "${app.bundleId}"
+
+if [ -d "${APP_DIR}/${APP_BUNDLE}" ]; then
+  /usr/bin/xattr -cr "${APP_DIR}/${APP_BUNDLE}"
+fi
+
+if [ -n "${MAC_SIGN_IDENTITY:-}" ]; then
+  /usr/bin/codesign --force --deep --options runtime --sign "${MAC_SIGN_IDENTITY}" "${APP_DIR}/${APP_BUNDLE}"
+else
+  /usr/bin/codesign --force --deep --sign - "${APP_DIR}/${APP_BUNDLE}"
+fi
+
+rm -f "${APP_DIR}/${APP_NAME}-${project.version}.dmg"
+
+"${java.home}/bin/jpackage" \
+  --type dmg \
+  --name "${APP_NAME}" \
+  --app-image "${APP_DIR}/${APP_BUNDLE}" \
+  --dest "${APP_DIR}" \
+  --icon "${app.icon}" \
+  --app-version "${project.version}" \
+  --mac-package-identifier "${app.bundleId}"
+                                        ]]></argument>
                                     </arguments>
+                                    <environmentVariables>
+                                        <MAC_SIGN_IDENTITY>${mac.sign.identity}</MAC_SIGN_IDENTITY>
+                                    </environmentVariables>
                                 </configuration>
                             </execution>
                         </executions>
