@@ -1,10 +1,7 @@
 // File: src/main/java/app/Main.java
 package app;
 
-import java.awt.Taskbar;
-
 import javafx.application.Application;
-import javafx.embed.swing.SwingFXUtils;
 import javafx.scene.Scene;
 import javafx.scene.SnapshotParameters;
 import javafx.scene.canvas.Canvas;
@@ -13,6 +10,8 @@ import javafx.scene.image.Image;
 import javafx.scene.image.WritableImage;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
+
+import java.lang.reflect.Method;
 
 public class Main extends Application {
     // 자동 시작 옵션(원하면 true로)
@@ -96,13 +95,11 @@ public class Main extends Application {
     private static void applyDockIcon(Image fxIcon) {
         if (fxIcon == null) return;
         try {
-            if (!Taskbar.isTaskbarSupported()) return;
-            Taskbar taskbar = Taskbar.getTaskbar();
-            if (!taskbar.isSupported(Taskbar.Feature.ICON_IMAGE)) return;
-            java.awt.Image awtImage = SwingFXUtils.fromFXImage(fxIcon, null);
-            if (awtImage != null) {
-                taskbar.setIconImage(awtImage);
-            }
+            Class<?> appClass = Class.forName("com.sun.glass.ui.Application");
+            Method getApplication = appClass.getMethod("GetApplication");
+            Object application = getApplication.invoke(null);
+            Method setDockIconImage = appClass.getMethod("setDockIconImage", Image.class);
+            setDockIconImage.invoke(application, fxIcon);
         } catch (Throwable ignore) {
             // Dock icon customization best-effort; ignore failures on unsupported platforms.
         }
