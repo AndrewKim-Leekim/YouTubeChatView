@@ -38,10 +38,10 @@ public final class ViewerService {
     private String v1 = "";
     private String v2 = "";
 
-    private final SimpleStringProperty count1 = new SimpleStringProperty("시청: —명");
-    private final SimpleStringProperty count2 = new SimpleStringProperty("시청: —명");
-    private final SimpleStringProperty subs1  = new SimpleStringProperty("구독자: —");
-    private final SimpleStringProperty subs2  = new SimpleStringProperty("구독자: —");
+    private final SimpleStringProperty count1 = new SimpleStringProperty("—");
+    private final SimpleStringProperty count2 = new SimpleStringProperty("—");
+    private final SimpleStringProperty subs1  = new SimpleStringProperty("—");
+    private final SimpleStringProperty subs2  = new SimpleStringProperty("—");
     private final SimpleStringProperty ch1Name = new SimpleStringProperty("");
     private final SimpleStringProperty ch2Name = new SimpleStringProperty("");
     private final SimpleStringProperty ch1Logo = new SimpleStringProperty("");
@@ -76,10 +76,8 @@ public final class ViewerService {
                                         ? CompletableFuture.completedFuture(opt2)
                                         : scrapeWatchPageWatchersJSON(videoId)))
                 .exceptionally(ex -> { System.err.println("[viewers] "+ex); return Optional.empty(); })
-                .thenAccept(opt -> Platform.runLater(() -> {
-                    String value = opt.map(nf::format).orElse("—");
-                    out.set("시청: " + value + "명");
-                }));
+                .thenAccept(opt -> Platform.runLater(() ->
+                        out.set(opt.map(nf::format).orElse("—"))));
     }
 
     // ===== Viewers =====
@@ -151,12 +149,12 @@ public final class ViewerService {
                             try {
                                 JsonNode stats = om.readTree(sBody).path("items").path(0).path("statistics");
                                 if (stats.path("hiddenSubscriberCount").asBoolean(false)) {
-                                    Platform.runLater(() -> subsOut.set("구독자: 비공개"));
+                                    Platform.runLater(() -> subsOut.set("비공개"));
                                 } else {
                                     String sc = stats.path("subscriberCount").asText("");
                                     if (!sc.isEmpty()) {
                                         String pretty = nf.format(Long.parseLong(sc));
-                                        Platform.runLater(() -> subsOut.set("구독자: "+pretty+"명"));
+                                        Platform.runLater(() -> subsOut.set(pretty));
                                         return;
                                     }
                                     fetchSubscribersViaInnertube(chId).thenAccept(txt -> {
@@ -233,7 +231,7 @@ public final class ViewerService {
             } catch (Exception e) {
                 return CompletableFuture.completedFuture(null);
             }
-        }).thenApply(pretty -> pretty == null ? null : "구독자: " + pretty + "명");
+        }).thenApply(pretty -> pretty == null ? null : pretty);
     }
 
     private CompletableFuture<String> scrapeSubscribersFromChannelURLs(String baseChannelURL, String preferChannelId) {
@@ -253,14 +251,14 @@ public final class ViewerService {
                 if (dict != null) {
                     String txt = YouTubeParsers.findSubscriberText(dict);
                     String pretty = YouTubeParsers.formatSubscribers(txt, nf);
-                    if (pretty != null) any.complete("구독자: "+pretty+"명");
+                    if (pretty != null) any.complete(pretty);
                 }
                 if (!any.isDone()) {
                     String raw = YouTubeParsers.extractSubscriberTextFromHTML(html);
                     String pretty = YouTubeParsers.formatSubscribers(raw, nf);
-                    if (pretty != null) any.complete("구독자: "+pretty+"명");
+                    if (pretty != null) any.complete(pretty);
                     else if (html.contains("구독자 비공개") || html.toLowerCase().contains("subscribers hidden"))
-                        any.complete("구독자: 비공개");
+                        any.complete("비공개");
                 }
                 return null;
             });
