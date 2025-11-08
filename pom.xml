@@ -165,6 +165,37 @@
                     </execution>
                 </executions>
             </plugin>
+
+            <plugin>
+                <groupId>org.panteleyev</groupId>
+                <artifactId>jpackage-maven-plugin</artifactId>
+                <version>1.9.1</version>
+                <configuration>
+                    <name>${app.name}</name>
+                    <type>dmg</type>
+                    <appVersion>${project.version}</appVersion>
+                    <input>${project.build.directory}/dist</input>
+                    <dest>${jpackage.output}</dest>
+                    <mainJar>${project.build.finalName}.jar</mainJar>
+                    <icon>${app.icon}</icon>
+                    <macPackageIdentifier>${mac.package.identifier}</macPackageIdentifier>
+                    <javaOptions>
+                        <javaOption>-XX:ReservedCodeCacheSize=128m</javaOption>
+                        <javaOption>-XX:InitialCodeCacheSize=32m</javaOption>
+                        <javaOption>-Xshare:off</javaOption>
+                    </javaOptions>
+                    <runtimeImage>${project.build.directory}/yt-multichat</runtimeImage>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>package-dmg</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>jpackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 
