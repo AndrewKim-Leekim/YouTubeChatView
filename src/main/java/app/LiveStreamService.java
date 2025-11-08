@@ -152,16 +152,242 @@ public final class LiveStreamService {
     }
 
     private List<LiveStream> parseLiveFromHtml(String html) {
-        Map<String, Object> dict = YouTubeParsers.extractJSONDict(html, "ytInitialPlayerResponse");
-        if (dict == null) return Collections.emptyList();
-        Object vd = dict.get("videoDetails");
-        if (!(vd instanceof Map)) return Collections.emptyList();
-        @SuppressWarnings("unchecked")
-        Map<String, Object> map = (Map<String, Object>) vd;
-        String videoId = Objects.toString(map.get("videoId"), "");
-        if (videoId.isEmpty()) return Collections.emptyList();
-        String title = Objects.toString(map.get("title"), "(제목 없음)");
-        return List.of(new LiveStream(videoId, title, "라이브 페이지에서 감지됨"));
+        if (html == null || html.isBlank()) {
+            return Collections.emptyList();
+        }
+
+        Map<String, LiveStream> dedup = new LinkedHashMap<>();
+
+        Map<String, Object> player = YouTubeParsers.extractJSONDict(html, "ytInitialPlayerResponse");
+        if (player != null) {
+            Object vd = player.get("videoDetails");
+            if (vd instanceof Map) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> map = (Map<String, Object>) vd;
+                String videoId = stringValue(map.get("videoId"));
+                if (!videoId.isEmpty()) {
+                    String title = defaultString(stringValue(map.get("title")), "(제목 없음)");
+                    dedup.putIfAbsent(videoId, new LiveStream(videoId, title, "라이브 페이지에서 감지됨"));
+                }
+            }
+        }
+
+        Map<String, Object> data = YouTubeParsers.extractJSONDict(html, "ytInitialData");
+        if (data != null) {
+            List<Map<String, Object>> renderers = new ArrayList<>();
+            collectVideoRenderers(data, renderers);
+            for (Map<String, Object> renderer : renderers) {
+                if (!isLiveRenderer(renderer)) {
+                    continue;
+                }
+                String videoId = stringValue(renderer.get("videoId"));
+                if (videoId.isEmpty()) {
+                    continue;
+                }
+                String title = defaultString(extractText(renderer.get("title")), "(제목 없음)");
+                String subtitle = deriveSubtitle(renderer);
+                dedup.putIfAbsent(videoId, new LiveStream(videoId, title, subtitle));
+            }
+        }
+
+        if (dedup.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return new ArrayList<>(dedup.values());
+    }
+
+    private void collectVideoRenderers(Object node, List<Map<String, Object>> out) {
+        if (node instanceof Map<?, ?> map) {
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                Object value = entry.getValue();
+                if (value instanceof Map<?, ?> childMap) {
+                    if ("videoRenderer".equals(entry.getKey()) || "gridVideoRenderer".equals(entry.getKey())) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> renderer = (Map<String, Object>) childMap;
+                        out.add(renderer);
+                    } else if ("richItemRenderer".equals(entry.getKey())) {
+                        collectVideoRenderers(childMap, out);
+                    }
+                }
+                collectVideoRenderers(value, out);
+            }
+        } else if (node instanceof List<?> list) {
+            for (Object value : list) {
+                collectVideoRenderers(value, out);
+            }
+        }
+    }
+
+    private boolean isLiveRenderer(Map<String, Object> renderer) {
+        if (renderer == null) {
+            return false;
+        }
+        if (renderer.containsKey("upcomingEventData")) {
+            return true;
+        }
+        if (containsLiveBadge(renderer.get("badges"))) {
+            return true;
+        }
+        if (containsLiveBadge(renderer.get("ownerBadges"))) {
+            return true;
+        }
+        if (containsLiveOverlay(renderer.get("thumbnailOverlays"))) {
+            return true;
+        }
+        if (containsLiveText(renderer.get("viewCountText"))) {
+            return true;
+        }
+        if (containsLiveText(renderer.get("shortViewCountText"))) {
+            return true;
+        }
+        return false;
+    }
+
+    private boolean containsLiveBadge(Object badges) {
+        if (!(badges instanceof List<?> list)) {
+            return false;
+        }
+        for (Object item : list) {
+            if (item instanceof Map<?, ?> map) {
+                Object badge = map.get("metadataBadgeRenderer");
+                if (badge instanceof Map<?, ?> meta) {
+                    String style = stringValue(meta.get("style"));
+                    if ("BADGE_STYLE_TYPE_LIVE_NOW".equals(style) || "BADGE_STYLE_TYPE_UPCOMING".equals(style)) {
+                        return true;
+                    }
+                    String label = extractText(meta.get("label"));
+                    if (containsLiveKeyword(label)) {
+                        return true;
+                    }
+                    String tooltip = stringValue(meta.get("tooltip"));
+                    if (containsLiveKeyword(tooltip)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean containsLiveOverlay(Object overlays) {
+        if (!(overlays instanceof List<?> list)) {
+            return false;
+        }
+        for (Object item : list) {
+            if (item instanceof Map<?, ?> map) {
+                Object overlay = map.get("thumbnailOverlayTimeStatusRenderer");
+                if (overlay instanceof Map<?, ?> status) {
+                    String style = stringValue(status.get("style"));
+                    if ("LIVE".equalsIgnoreCase(style) || "LIVE_NOW".equalsIgnoreCase(style) || "UPCOMING".equalsIgnoreCase(style)) {
+                        return true;
+                    }
+                    String text = extractText(status.get("text"));
+                    if (containsLiveKeyword(text)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean containsLiveText(Object candidate) {
+        String text = extractText(candidate);
+        return containsLiveKeyword(text);
+    }
+
+    private boolean containsLiveKeyword(String text) {
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+        String lower = text.toLowerCase(Locale.ROOT);
+        return lower.contains("live") || lower.contains("실시간") || lower.contains("시청 중") || lower.contains("방송 예정");
+    }
+
+    private String deriveSubtitle(Map<String, Object> renderer) {
+        Object upcoming = renderer.get("upcomingEventData");
+        if (upcoming instanceof Map<?, ?> map) {
+            String when = stringValue(map.get("startTime"));
+            if (!when.isEmpty()) {
+                try {
+                    long epoch = Long.parseLong(when);
+                    if (epoch > 0L) {
+                        return "예정 " + HUMAN_TIME.format(Instant.ofEpochSecond(epoch));
+                    }
+                } catch (NumberFormatException ignore) {
+                    // fall back to text extraction
+                }
+            }
+            String text = extractText(map.get("label"));
+            if (!text.isEmpty()) {
+                return text;
+            }
+        }
+
+        String viewText = extractText(renderer.get("viewCountText"));
+        if (!viewText.isEmpty()) {
+            return viewText;
+        }
+
+        String shortText = extractText(renderer.get("shortViewCountText"));
+        if (!shortText.isEmpty()) {
+            return shortText;
+        }
+
+        String published = extractText(renderer.get("publishedTimeText"));
+        if (!published.isEmpty()) {
+            return published;
+        }
+
+        return "라이브 페이지에서 감지됨";
+    }
+
+    private String extractText(Object value) {
+        if (value instanceof String s) {
+            return s;
+        }
+        if (value instanceof Map<?, ?> map) {
+            Object simple = map.get("simpleText");
+            if (simple instanceof String s) {
+                return s;
+            }
+            Object text = map.get("text");
+            if (text instanceof String s) {
+                return s;
+            }
+            Object runs = map.get("runs");
+            if (runs instanceof List<?>) {
+                StringBuilder sb = new StringBuilder();
+                for (Object run : (List<?>) runs) {
+                    String chunk = extractText(run);
+                    if (!chunk.isEmpty()) {
+                        sb.append(chunk);
+                    }
+                }
+                return sb.toString();
+            }
+        } else if (value instanceof List<?>) {
+            StringBuilder sb = new StringBuilder();
+            for (Object run : (List<?>) value) {
+                String chunk = extractText(run);
+                if (!chunk.isEmpty()) {
+                    if (sb.length() > 0) {
+                        sb.append(' ');
+                    }
+                    sb.append(chunk);
+                }
+            }
+            return sb.toString();
+        }
+        return "";
+    }
+
+    private String stringValue(Object value) {
+        return value == null ? "" : Objects.toString(value, "");
+    }
+
+    private String defaultString(String value, String fallback) {
+        return (value == null || value.isBlank()) ? fallback : value;
     }
 
     private static String buildSubtitle(String actual, String scheduled) {
